@@ -71,6 +71,10 @@
     <button id="go">Talk to the river</button>
     <div class="hint">Try: “How are you feeling today?” · “When did you last flood?” ·
       “Why do you flood so fast?” · “What did the city do to you?”<br>Interrupt any time. Headphones help.</div>
+    <form id="ask" style="display:flex;gap:8px;width:100%;max-width:440px">
+      <input id="q" placeholder="…or type a question and press Enter" autocomplete="off"
+        style="flex:1;padding:12px 16px;border-radius:999px;border:1px solid #2f6b72;background:#06202a;color:var(--ink);font-size:15px">
+    </form>
   </section>
 
   <section class="panel">
@@ -153,14 +157,19 @@ function meter() {
 async function start() {
   ctx = new AudioContext();
   analyser = ctx.createAnalyser(); analyser.fftSize = 512; analyser.connect(ctx.destination);
-  micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 } });
-  await ctx.audioWorklet.addModule("/static/mic-worklet.js");
-  micNode = new AudioWorkletNode(ctx, "mic-processor");
-  ctx.createMediaStreamSource(micStream).connect(micNode);
+  try {  // no mic? keep going in type-to-talk mode
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 } });
+    await ctx.audioWorklet.addModule("/static/mic-worklet.js");
+    micNode = new AudioWorkletNode(ctx, "mic-processor");
+    ctx.createMediaStreamSource(micStream).connect(micNode);
+  } catch (e) {
+    micNode = null;
+    note(`🎙 No microphone (${e.name}). Type your questions below; the river will still speak.`);
+  }
 
   ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
   ws.binaryType = "arraybuffer";
-  micNode.port.onmessage = (e) => ws.readyState === 1 && ws.send(e.data);
+  if (micNode) micNode.port.onmessage = (e) => ws.readyState === 1 && ws.send(e.data);
   ws.onmessage = (m) => handle(JSON.parse(m.data));
   ws.onclose = () => stop(false);
   $("go").textContent = "End conversation"; $("go").classList.add("live");
@@ -197,6 +206,20 @@ function stop(closeWs = true) {
   document.documentElement.style.setProperty("--lvl", 0);
   $("go").textContent = "Talk to the river"; $("go").classList.remove("live");
 }
+
+$("ask").onsubmit = async (e) => {
+  e.preventDefault();
+  const text = $("q").value.trim();
+  if (!text) return;
+  if (!ws) { await start(); await new Promise((r) => ws.addEventListener("open", r, { once: true })); }
+  $("q").value = "";
+  stopPlayback();
+  const el = document.createElement("div"); el.className = "msg you"; el.textContent = text;
+  log.appendChild(el); log.scrollTop = log.scrollHeight;
+  ws.send(JSON.stringify({ type: "conversation.item.create", item: { type: "message", role: "user",
+    content: [{ type: "input_text", text }] } }));
+  ws.send(JSON.stringify({ type: "response.create" }));
+};
 
 $("go").onclick = () => (ws ? stop() : start().catch((e) => { note(`⚠ ${e}`, "tool err"); stop(); }));
 </script>
