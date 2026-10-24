@@ -201,6 +201,12 @@ async def ws_relay(req):
                 },
             },
         })
+        # Let the river speak first. (Higgs doesn't emit session.updated, so kick off here.)
+        await boson.send_json({"type": "conversation.item.create", "item": {
+            "type": "message", "role": "user", "content": [{"type": "input_text", "text":
+                "(A visitor has just walked up to your bank. Check how you're doing, then greet them "
+                "in two sentences.)"}]}})
+        await boson.send_json({"type": "response.create"})
 
         async def browser_to_boson():
             async for msg in browser:
