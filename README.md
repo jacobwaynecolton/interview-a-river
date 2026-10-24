@@ -1,4 +1,4 @@
-# Interview a River
+# Interview a River (This was just a test project for the Hackathon) 
 
 Talk out loud to the Don River (Toronto). It answers in the first person, grounded in its
 **live Water Survey of Canada gauge** (station 02HC024, 5-minute readings, ~30 days of history),
